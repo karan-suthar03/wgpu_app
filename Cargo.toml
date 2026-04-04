@@ -4,7 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-glfw = "*"
 wgpu = "29"
 pollster = "*"
 winit = "0.30"
