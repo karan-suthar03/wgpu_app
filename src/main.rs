@@ -2,6 +2,8 @@ use std::num::NonZero;
 
 use wgpu::CurrentSurfaceTexture;
 use winit::{event_loop::EventLoop, window::WindowAttributes};
+mod renderer_backend;
+use renderer_backend::pipeline_builder::PipelineBuilder;
 
 struct State<'a> {
     instance: wgpu::Instance,
@@ -11,6 +13,7 @@ struct State<'a> {
     config: wgpu::SurfaceConfiguration,
     size: (u32, u32),
     window: &'a winit::window::Window,
+    render_pipeline: wgpu::RenderPipeline,
 }
 
 impl<'a> State<'a> {
@@ -61,6 +64,11 @@ impl<'a> State<'a> {
 
         surface.configure(&device, &config);
 
+        let mut pipeline_builder = PipelineBuilder::new();
+        pipeline_builder.set_shader_module("shaders/shader.wgsl", "vs_main", "fs_main");
+        pipeline_builder.set_pixel_format(config.format);
+        let render_pipeline = pipeline_builder.build_pipeline(&device);
+
         Self {
             instance,
             surface,
@@ -69,6 +77,7 @@ impl<'a> State<'a> {
             config,
             size,
             window,
+            render_pipeline,
         }
     }
 
@@ -110,8 +119,11 @@ impl<'a> State<'a> {
             timestamp_writes: None,
             multiview_mask: NonZero::new(0),
         };
-
-        encoder.begin_render_pass(&render_pass_descriptor);
+        {
+            let mut render_pass = encoder.begin_render_pass(&render_pass_descriptor);
+            render_pass.set_pipeline(&self.render_pipeline);
+            render_pass.draw(0..3, 0..1);
+        }
         self.queue.submit(std::iter::once(encoder.finish()));
         drawable.present();
     }
@@ -148,6 +160,10 @@ fn main() {
                             println!("Escape key pressed, exiting...");
                             std::process::exit(0);
                         }
+                }
+                winit::event::WindowEvent::CloseRequested => {
+                    println!("Window close requested, exiting...");
+                    std::process::exit(0);
                 }
                 _ => {}
             },
