@@ -1,6 +1,7 @@
 use std::num::NonZero;
 
-use wgpu::CurrentSurfaceTexture;
+use pollster::block_on;
+use wgpu::{CurrentSurfaceTexture, RequestAdapterOptionsBase};
 use winit::{event_loop::EventLoop, window::WindowAttributes};
 mod renderer_backend;
 use renderer_backend::pipeline_builder::PipelineBuilder;
@@ -14,6 +15,7 @@ struct State<'a> {
     size: (u32, u32),
     window: &'a winit::window::Window,
     render_pipeline: wgpu::RenderPipeline,
+    multisampled_framebuffer: wgpu::Texture,
 }
 
 impl<'a> State<'a> {
@@ -26,14 +28,19 @@ impl<'a> State<'a> {
         let instance = wgpu::Instance::new(instance_descriptor);
 
         let surface = instance.create_surface(window).unwrap();
+        
+        let adapter = block_on(instance.enumerate_adapters(wgpu::Backends::all()));
 
-        let adapter_descriptor = wgpu::RequestAdapterOptionsBase {
-            power_preference: wgpu::PowerPreference::default(),
-            compatible_surface: Some(&surface),
-            force_fallback_adapter: false,
-        };
+        let adapter = adapter.into_iter()
+            .filter(|adapter| {
+                let adapter_info = adapter.get_info();
+                println!("Found adapter: {}", adapter_info.name);
+                adapter_info.name.contains("NVIDIA") 
+            })
+            .next()
+            .expect("No suitable GPU adapters found on the system!");
 
-        let adapter = instance.request_adapter(&adapter_descriptor).await.unwrap();
+        println!("GPU name: {}", adapter.get_info().name);
 
         let device_descriptor = wgpu::DeviceDescriptor {
             required_features: wgpu::Features::empty(),
@@ -69,6 +76,21 @@ impl<'a> State<'a> {
         pipeline_builder.set_pixel_format(config.format);
         let render_pipeline = pipeline_builder.build_pipeline(&device);
 
+        let multisampled_framebuffer = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Multisampled Framebuffer"),
+            size: wgpu::Extent3d {
+                width: config.width,
+                height: config.height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 4,
+            dimension: wgpu::TextureDimension::D2,
+            format: config.format,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
+
         Self {
             instance,
             surface,
@@ -78,6 +100,7 @@ impl<'a> State<'a> {
             size,
             window,
             render_pipeline,
+            multisampled_framebuffer,
         }
     }
 
@@ -101,9 +124,11 @@ impl<'a> State<'a> {
                 label: Some("Command Encoder"),
             });
 
+        let multisampled_view = self.multisampled_framebuffer.create_view(&wgpu::TextureViewDescriptor::default());
+
         let color_attachment = wgpu::RenderPassColorAttachment {
-            view: &view,
-            resolve_target: None,
+            view: &multisampled_view,
+            resolve_target: Some(&view),
             ops: wgpu::Operations {
                 load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
                 store: wgpu::StoreOp::Store,
@@ -133,6 +158,21 @@ impl<'a> State<'a> {
         self.config.width = new_size.0;
         self.config.height = new_size.1;
         self.surface.configure(&self.device, &self.config);
+
+        self.multisampled_framebuffer = self.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Multisampled Framebuffer"),
+            size: wgpu::Extent3d {
+                width: self.config.width,
+                height: self.config.height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 4,
+            dimension: wgpu::TextureDimension::D2,
+            format: self.config.format,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
     }
 }
 
@@ -140,6 +180,7 @@ fn main() {
     let event_loop = EventLoop::new().unwrap();
     let window = event_loop.create_window(WindowAttributes::new()).unwrap();
     let mut state = pollster::block_on(State::new(&window));
+
 
     event_loop
         .run(move |event, _elwt| match event {

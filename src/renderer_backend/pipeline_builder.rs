@@ -74,9 +74,9 @@ impl PipelineBuilder {
 
             depth_stencil: None,
             multisample: wgpu::MultisampleState {
-                count: 1,
+                count: 4,
                 mask: !0,
-                alpha_to_coverage_enabled: false,
+                alpha_to_coverage_enabled: true,
             },
             cache: None,
             multiview_mask: NonZero::new(0),
