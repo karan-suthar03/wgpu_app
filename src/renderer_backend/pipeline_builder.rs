@@ -9,6 +9,7 @@ pub struct PipelineBuilder{
     vertex_entry: String,
     fragment_entry: String,
     pixel_format: wgpu::TextureFormat,
+    vertex_buffer_layouts: Vec<wgpu::VertexBufferLayout<'static>>,
 }
 
 impl PipelineBuilder {
@@ -18,7 +19,12 @@ impl PipelineBuilder {
             vertex_entry: String::new(),
             fragment_entry: String::new(),
             pixel_format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            vertex_buffer_layouts: Vec::new(),
         }
+    }
+
+    pub fn add_vertex_buffer_layout(&mut self, layout: wgpu::VertexBufferLayout<'static>) {
+        self.vertex_buffer_layouts.push(layout);
     }
 
     pub fn set_shader_module(&mut self, shader_filename: &str, vertex_entry: &str, fragment_entry: &str) {
@@ -62,7 +68,7 @@ impl PipelineBuilder {
             vertex: wgpu::VertexState {
                 module: &shader_module,
                 entry_point: Some(self.vertex_entry.as_str()),
-                buffers: &[],
+                buffers: &self.vertex_buffer_layouts,
                 compilation_options: PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState {

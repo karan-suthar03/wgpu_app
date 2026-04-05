@@ -6,6 +6,8 @@ use winit::{event_loop::EventLoop, window::WindowAttributes};
 mod renderer_backend;
 use renderer_backend::pipeline_builder::PipelineBuilder;
 
+use crate::renderer_backend::mesh_builder;
+
 struct State<'a> {
     instance: wgpu::Instance,
     surface: wgpu::Surface<'a>,
@@ -16,6 +18,7 @@ struct State<'a> {
     window: &'a winit::window::Window,
     render_pipeline: wgpu::RenderPipeline,
     multisampled_framebuffer: wgpu::Texture,
+    triangle_mesh: wgpu::Buffer,
 }
 
 impl<'a> State<'a> {
@@ -82,8 +85,11 @@ impl<'a> State<'a> {
         };
 
         surface.configure(&device, &config);
+        
+        let triangle_mesh = renderer_backend::mesh_builder::make_triangle(&device);
 
         let mut pipeline_builder = PipelineBuilder::new();
+        pipeline_builder.add_vertex_buffer_layout(mesh_builder::Vertex::get_layout());
         pipeline_builder.set_shader_module("shaders/shader.wgsl", "vs_main", "fs_main");
         pipeline_builder.set_pixel_format(config.format);
         let render_pipeline = pipeline_builder.build_pipeline(&device);
@@ -103,6 +109,7 @@ impl<'a> State<'a> {
             view_formats: &[],
         });
 
+
         Self {
             instance,
             surface,
@@ -113,6 +120,7 @@ impl<'a> State<'a> {
             window,
             render_pipeline,
             multisampled_framebuffer,
+            triangle_mesh
         }
     }
 
@@ -159,6 +167,7 @@ impl<'a> State<'a> {
         {
             let mut render_pass = encoder.begin_render_pass(&render_pass_descriptor);
             render_pass.set_pipeline(&self.render_pipeline);
+            render_pass.set_vertex_buffer(0, self.triangle_mesh.slice(..));
             render_pass.draw(0..3, 0..1);
         }
         self.queue.submit(std::iter::once(encoder.finish()));
