@@ -29,17 +29,29 @@ impl<'a> State<'a> {
 
         let surface = instance.create_surface(window).unwrap();
         
-        let adapter = block_on(instance.enumerate_adapters(wgpu::Backends::all()));
+        let adapter_list = block_on(instance.enumerate_adapters(wgpu::Backends::all()));
 
-        let adapter = adapter.into_iter()
+        let adapter_op = adapter_list.into_iter()
             .filter(|adapter| {
                 let adapter_info = adapter.get_info();
                 println!("Found adapter: {}", adapter_info.name);
                 adapter_info.name.contains("NVIDIA") 
             })
-            .next()
-            .expect("No suitable GPU adapters found on the system!");
-
+            .next();
+        let adapter;
+        match adapter_op {
+            Some(a) => {
+                adapter = a;
+            }
+            None => {
+                adapter = block_on(instance.request_adapter(&RequestAdapterOptionsBase{
+                    power_preference: wgpu::PowerPreference::HighPerformance,
+                    force_fallback_adapter: true,
+                    compatible_surface: Some(&surface)
+                })).unwrap();
+            }
+        }
+        
         println!("GPU name: {}", adapter.get_info().name);
 
         let device_descriptor = wgpu::DeviceDescriptor {
